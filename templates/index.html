@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Area Calculator</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <h2>Project Setup</h2>
+            <div class="form-group">
+                <label>Name:</label>
+                <input type="text" id="projectName" value="Untitled">
+            </div>
+            <div class="form-group">
+                <label>Unit:</label>
+                <select id="unitSelect">
+                    <option value="mm">mm</option>
+                    <option value="cm">cm</option>
+                    <option value="dm">dm</option>
+                    <option value="m" selected>m</option>
+                    <option value="hm">hm</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Start Dir (°):</label>
+                <input type="number" id="startDir" value="0" step="1">
+            </div>
+
+            <hr>
+            <h2>Tools</h2>
+            <div class="btn-group">
+                <button id="btnDraw" class="btn-primary" onclick="toggleDrawMode()">Draw Mode (+)</button>
+                <button onclick="fitToScreen()">Fit to Screen</button>
+                <button onclick="clearCanvas()">Clear</button>
+            </div>
+            <div class="btn-group">
+                <button class="btn-success" onclick="calculate()">Calculate Area</button>
+                <button onclick="saveProject()">Save Project</button>
+                <button onclick="addDiagonal()">Add Diagonal</button>
+            </div>
+
+            <hr>
+            <h2>Results</h2>
+            <div id="resultsContainer" class="results-box">
+                <p class="hint">Draw a shape and click "Calculate Area".</p>
+            </div>
+
+            <hr>
+            <h2>Saved Projects</h2>
+            <div class="form-group">
+                <select id="projectsList">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+            <div class="btn-group">
+                <button onclick="loadSelectedProject()">Load</button>
+                <button onclick="refreshProjects()">Refresh</button>
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+            <div id="lengthPopup" class="popup">
+                <label>Real-world Length:</label>
+                <input type="number" id="popupLengthInput" step="any" min="0.01">
+                <div class="popup-actions">
+                    <button onclick="setLength()">Set</button>
+                    <button onclick="closePopup()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
