@@ -1,79 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Area Calculator</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Irregular Shapes Area Calculator</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="app-container">
-        <div class="sidebar">
-            <h2>Project Setup</h2>
-            <div class="form-group">
-                <label>Name:</label>
-                <input type="text" id="projectName" value="Untitled">
-            </div>
-            <div class="form-group">
-                <label>Unit:</label>
-                <select id="unitSelect">
-                    <option value="mm">mm</option>
-                    <option value="cm">cm</option>
-                    <option value="dm">dm</option>
-                    <option value="m" selected>m</option>
-                    <option value="hm">hm</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Start Dir (°):</label>
-                <input type="number" id="startDir" value="0" step="1">
-            </div>
-
-            <hr>
-            <h2>Tools</h2>
-            <div class="btn-group">
-                <button id="btnDraw" class="btn-primary" onclick="toggleDrawMode()">Draw Mode (+)</button>
-                <button onclick="fitToScreen()">Fit to Screen</button>
-                <button onclick="clearCanvas()">Clear</button>
-            </div>
-            <div class="btn-group">
-                <button class="btn-success" onclick="calculate()">Calculate Area</button>
-                <button onclick="saveProject()">Save Project</button>
-                <button onclick="addDiagonal()">Add Diagonal</button>
-            </div>
-
-            <hr>
-            <h2>Results</h2>
-            <div id="resultsContainer" class="results-box">
-                <p class="hint">Draw a shape and click "Calculate Area".</p>
-            </div>
-
-            <hr>
-            <h2>Saved Projects</h2>
-            <div class="form-group">
-                <select id="projectsList">
-                    <option value="">-- Select --</option>
-                </select>
-            </div>
-            <div class="btn-group">
-                <button onclick="loadSelectedProject()">Load</button>
-                <button onclick="refreshProjects()">Refresh</button>
-            </div>
-        </div>
-
-        <div class="canvas-container">
-            <canvas id="canvas"></canvas>
-            <div id="lengthPopup" class="popup">
-                <label>Real-world Length:</label>
-                <input type="number" id="popupLengthInput" step="any" min="0.01">
-                <div class="popup-actions">
-                    <button onclick="setLength()">Set</button>
-                    <button onclick="closePopup()">Cancel</button>
-                </div>
-            </div>
-        </div>
+  <header class="topbar">
+    <div><span class="eyebrow">Geometry workspace</span><h1>Irregular Shapes</h1></div>
+    <div class="topbar-actions"><button type="button" class="button ghost mobile-controls" id="drawerButton" aria-expanded="false" aria-controls="controlsDrawer">Controls</button><button type="button" class="button ghost" id="undoButton" title="Undo (Ctrl+Z)">Undo</button><button type="button" class="button ghost" id="redoButton" title="Redo (Ctrl+Y)">Redo</button><button type="button" class="button" id="fitButton">Fit view</button></div>
+  </header>
+  <main class="app-layout">
+    <aside class="sidebar" id="controlsDrawer" aria-label="Shape controls">
+      <div class="drawer-handle" aria-hidden="true"></div>
+      <section class="panel"><h2>Project</h2><label for="projectName">Name</label><input id="projectName" type="text" value="Untitled" maxlength="100"><div class="two-col"><div><label for="unitSelect">Unit</label><select id="unitSelect"><option value="mm">mm</option><option value="cm">cm</option><option value="dm">dm</option><option value="m" selected>m</option><option value="hm">hm</option></select></div><div><label for="startDir">Start heading °</label><input id="startDir" type="number" value="0" step="1"></div></div></section>
+      <section class="panel"><div class="section-heading"><h2>Draw</h2><button type="button" class="toggle" id="orthogonalButton" aria-pressed="false">Orthogonal</button></div><button type="button" class="button primary wide" id="drawButton">Start drawing</button><p class="hint">Click to place vertices. Hold Shift to snap. Click the glowing start point to close.</p><div class="two-col direct-inputs"><div><label for="lengthInput">Length</label><input id="lengthInput" type="number" min="0.001" step="any" placeholder="e.g. 5"></div><div><label for="angleInput">Turn °</label><input id="angleInput" type="number" step="any" placeholder="e.g. 90"></div></div><p class="hint">Enter a length to add a wall. Enter a turn to set the next wall direction.</p><div class="button-row"><button type="button" class="button danger" id="clearButton">Clear</button><button type="button" class="button" id="closeButton">Close shape</button></div></section>
+      <section class="panel"><h2>Live measurements</h2><div class="stats"><div><span>Area</span><strong id="areaStat">0 m²</strong></div><div><span>Perimeter</span><strong id="perimeterStat">0 m</strong></div><div><span>Vertices</span><strong id="vertexStat">1</strong></div></div></section>
+      <section class="panel"><div class="section-heading"><h2>Walls</h2><span id="wallCount" class="count">0</span></div><div id="wallList" class="wall-list"><p class="empty">No walls yet.</p></div></section>
+      <section class="panel"><div class="section-heading"><h2>Diagonals</h2><button type="button" class="button small" id="addDiagonalButton">Add</button></div><p class="hint">Choose two vertices and record a measured distance.</p><div id="diagonalList" class="diagonal-list"><p class="empty">No diagonals measured.</p></div></section>
+      <section class="panel"><h2>Saved projects</h2><div class="button-row"><button type="button" class="button primary" id="saveButton">Save current</button><button type="button" class="button" id="refreshButton">Refresh</button></div><label for="projectsList">Available projects</label><select id="projectsList"><option value="">Choose a project</option></select><div class="button-row"><button type="button" class="button" id="loadButton">Load</button><button type="button" class="button danger" id="deleteButton">Delete</button></div></section>
+    </aside>
+    <section class="workspace" aria-label="Shape drawing canvas"><canvas id="canvas" aria-label="Interactive shape drawing canvas"></canvas><div class="canvas-toolbar"><span id="toolStatus">Select or draw a shape</span><span>Wheel: zoom · Space + drag: pan</span></div></section>
+  </main>
+  <div id="floatingKeypad" class="numeric-keypad" role="dialog" aria-modal="false" aria-labelledby="keypadTitle" aria-hidden="true">
+    <div class="keypad-header"><span id="keypadTitle">Wall length</span><button type="button" class="keypad-close" data-key="cancel" aria-label="Close keypad">×</button></div>
+    <output id="keypadValue">0</output>
+    <div class="keypad-grid">
+      <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+      <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
+      <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+      <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="back" aria-label="Delete digit">⌫</button>
     </div>
-
-    <script src="/static/app.js"></script>
+    <div class="keypad-actions"><button type="button" class="button" data-key="cancel">Cancel</button><button type="button" class="button primary" data-key="apply">Apply</button></div>
+  </div>
+  <div id="modalRoot" class="modal-root" aria-live="polite"></div><div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>

@@ -2,11 +2,13 @@ import math
 import json
 import uuid
 import os
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
+app.config["JSON_SORT_KEYS"] = False
 
 PROJECTS_DIR = Path(__file__).parent / "projects"
 PROJECTS_DIR.mkdir(exist_ok=True)
@@ -34,6 +36,42 @@ UNIT_AREA_FACTOR = {
     "m": 1.0,
     "hm": 0.0001,
 }
+
+def ok(data=None, status=200):
+    """Return the consistent API envelope used by the client."""
+    return jsonify({"ok": True, "data": data or {}}), status
+
+def error(message, status=400):
+    return jsonify({"ok": False, "error": message}), status
+
+def valid_project_id(project_id):
+    return isinstance(project_id, str) and len(project_id) == 32 and all(c in "0123456789abcdef" for c in project_id)
+
+def project_path(project_id):
+    return PROJECTS_DIR / f"{project_id}.json"
+
+def get_lan_ip():
+    """Find the outbound LAN IPv4 address without DNS or hostname guessing."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # No traffic is sent by UDP connect; it only selects the local interface.
+        sock.connect(("8.8.8.8", 80))
+        ip = sock.getsockname()[0]
+        return ip if not ip.startswith("127.") else None
+    except OSError:
+        return None
+    finally:
+        sock.close()
+
+@app.errorhandler(404)
+def api_not_found(_):
+    if request.path.startswith("/api/"):
+        return error("Endpoint not found.", 404)
+    return "Not found", 404
+
+@app.errorhandler(500)
+def api_server_error(_):
+    return error("The server could not complete the request.", 500)
 
 def segments_intersect(p1, p2, p3, p4):
     def cross(o, a, b):
@@ -194,10 +232,11 @@ def index():
 def api_calculate():
     try: data = request.get_json(force=True)
     except: return jsonify({"ok": False, "error": "Invalid JSON payload."}), 400
-    if not data: return jsonify({"ok": False, "error": "Empty request body."}), 400
+    if not isinstance(data, dict): return error("Request body must be an object.", 400)
     result = calculate_project(data)
-    if not result.get("ok"): return jsonify(result), 400
-    return jsonify(result)
+    if not result.get("ok"): return error(result["error"], 400)
+    result.pop("ok", None)
+    return ok(result)
 
 @app.route("/api/projects", methods=["GET"])
 def api_list_projects():
@@ -208,25 +247,67 @@ def api_list_projects():
             projects.append({"id": d.get("id", f.stem), "name": d.get("name", "Untitled"), "unit": d.get("unit", "m"), "savedAt": d.get("savedAt", "")})
         except: continue
     projects.sort(key=lambda p: p.get("savedAt", ""), reverse=True)
-    return jsonify({"ok": True, "projects": projects})
+    return ok({"projects": projects})
 
 @app.route("/api/projects", methods=["POST"])
 def api_save_project():
     try: data = request.get_json(force=True)
     except: return jsonify({"ok": False, "error": "Invalid JSON payload."}), 400
-    if not data: return jsonify({"ok": False, "error": "Empty request body."}), 400
+    if not isinstance(data, dict): return error("Request body must be an object.", 400)
+    name = str(data.get("name", "Untitled")).strip()[:100] or "Untitled"
+    unit = data.get("unit", "m")
+    if unit not in UNIT_TO_METERS:
+        return error("Invalid unit.", 400)
+    if not isinstance(data.get("walls", []), list) or not isinstance(data.get("diagonals", []), list):
+        return error("Walls and diagonals must be lists.", 400)
     project_id = uuid.uuid4().hex
-    project = {"version": 1, "id": project_id, "name": data.get("name", "Untitled"), "unit": data.get("unit", "m"), "start_direction_deg": data.get("start_direction_deg", 0), "last_wall_closes_to_start": data.get("last_wall_closes_to_start", True), "walls": data.get("walls", []), "diagonals": data.get("diagonals", []), "savedAt": datetime.now(timezone.utc).isoformat()}
-    with open(PROJECTS_DIR / f"{project_id}.json", "w") as f: json.dump(project, f, indent=2)
-    return jsonify({"ok": True, "id": project_id, "name": project["name"]})
+    project = {"version": 2, "id": project_id, "name": name, "unit": unit, "start_direction_deg": data.get("start_direction_deg", 0), "last_wall_closes_to_start": bool(data.get("last_wall_closes_to_start", True)), "walls": data["walls"], "diagonals": data["diagonals"], "savedAt": datetime.now(timezone.utc).isoformat()}
+    try:
+        with open(project_path(project_id), "w", encoding="utf-8") as f:
+            json.dump(project, f, indent=2)
+    except OSError:
+        return error("Project could not be saved.", 500)
+    return ok({"id": project_id, "name": project["name"]}, 201)
 
 @app.route("/api/projects/<project_id>", methods=["GET"])
 def api_load_project(project_id):
-    if not all(c in "0123456789abcdef" for c in project_id): return jsonify({"ok": False, "error": "Invalid project ID."}), 400
-    filepath = PROJECTS_DIR / f"{project_id}.json"
+    if not valid_project_id(project_id): return error("Invalid project ID.", 400)
+    filepath = project_path(project_id)
     if not filepath.exists(): return jsonify({"ok": False, "error": "Project not found."}), 404
-    with open(filepath, "r") as f: project = json.load(f)
-    return jsonify({"ok": True, "project": project})
+    try:
+        with open(filepath, "r", encoding="utf-8") as f: project = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return error("Saved project is unreadable.", 500)
+    return ok({"project": project})
+
+@app.route("/api/projects/<project_id>", methods=["DELETE"])
+def api_delete_project(project_id):
+    if not valid_project_id(project_id):
+        return error("Invalid project ID.", 400)
+    filepath = project_path(project_id)
+    if not filepath.exists():
+        return error("Project not found.", 404)
+    try:
+        filepath.unlink()
+    except OSError:
+        return error("Project could not be deleted.", 500)
+    return ok({"id": project_id})
 
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    try:
+        port = int(os.environ.get("PORT", "5000"))
+    except ValueError:
+        port = 5000
+    lan_ip = get_lan_ip()
+    print("\n" + "=" * 54)
+    print("  Irregular Shapes Area Calculator")
+    print("=" * 54)
+    print(f"  Local:  http://127.0.0.1:{port}")
+    if lan_ip:
+        print(f"  LAN:    http://{lan_ip}:{port}")
+        print("  On your phone, join the same Wi-Fi network and")
+        print("  open the LAN URL above in the browser.")
+    else:
+        print("  LAN IP unavailable. Check your active Wi-Fi connection.")
+    print("=" * 54 + "\n")
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", host="0.0.0.0", port=port)
